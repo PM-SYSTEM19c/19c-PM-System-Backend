@@ -1,0 +1,239 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================================
+// ENUMS
+// ========================================
+
+enum Role {
+  PM
+  INTERNAL
+  CLIENT
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum UserStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ========================================
+// MODELS
+// ========================================
+
+/// Department — Tabel terpisah untuk departemen (bukan enum)
+/// Bisa dikelola secara dinamis seperti di perusahaan nyata
+model Department {
+  id          String    @id @default(cuid())
+  name        String    @unique // e.g. "UI/UX", "Frontend", "Backend"
+  code        String    @unique // e.g. "UI_UX", "FRONTEND", "BACKEND"
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  users User[]
+  tasks Task[]
+  projects ProjectDepartment[]
+
+  @@map("departments")
+}
+
+/// Position — Tabel terpisah untuk posisi/jabatan
+model Position {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  users User[]
+
+  @@map("positions")
+}
+
+/// User — Pengguna sistem
+/// Role: PM (Product Manager), INTERNAL (Tim Internal), CLIENT (Klien Eksternal)
+/// INTERNAL wajib punya departmentId, PM & CLIENT tidak punya
+model User {
+  id           String      @id @default(cuid())
+  name         String
+  email        String      @unique
+  passwordHash String
+  role         Role
+  status       UserStatus  @default(APPROVED)
+  positionId   String?     
+  position     Position?   @relation(fields: [positionId], references: [id])
+  departmentId String?
+  avatarUrl    String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  deletedAt    DateTime?
+
+  department         Department?     @relation(fields: [departmentId], references: [id])
+  assignedTasks      Task[]          @relation("TaskAssignee")
+  clientProjects     Project[]       @relation("ProjectClient")
+  auditLogs          TaskAuditLog[]
+  attachments        TaskAttachment[]
+
+  @@index([email])
+  @@index([role])
+  @@index([departmentId])
+  @@map("users")
+}
+
+/// Project — Proyek yang dikelola
+model Project {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  clientId    String?
+  client      User?     @relation("ProjectClient", fields: [clientId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  departments ProjectDepartment[]
+  tasks   Task[]
+  standups DailyStandup[]
+
+  @@map("projects")
+}
+
+/// ProjectDepartment — Relasi many-to-many antara Project dan Department
+model ProjectDepartment {
+  projectId    String
+  departmentId String
+  createdAt    DateTime  @default(now())
+  /// Soft delete — removing a department from a project never deletes the row
+  deletedAt    DateTime?
+
+  project    Project    @relation(fields: [projectId], references: [id])
+  department Department @relation(fields: [departmentId], references: [id])
+
+  @@id([projectId, departmentId])
+  @@map("project_departments")
+}
+
+/// Task — Tugas dalam proyek
+model Task {
+  id            String     @id @default(cuid())
+  projectId     String
+  title         String
+  description   String?
+  status        TaskStatus @default(TODO)
+  departmentId  String
+  assigneeId    String?
+  clientVisible Boolean    @default(false)
+  version       Int        @default(1)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+
+  project  Project     @relation(fields: [projectId], references: [id])
+  department Department @relation(fields: [departmentId], references: [id])
+  assignee User?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
+
+  // Task A depends on Task B (A cannot start until B is DONE)
+  dependencies TaskDependency[] @relation("TaskDependencies")
+  // Tasks that depend on this task
+  dependents   TaskDependency[] @relation("TaskDependents")
+
+  attachments TaskAttachment[]
+  auditLogs   TaskAuditLog[]
+
+  @@index([projectId])
+  @@index([assigneeId])
+  @@index([status])
+  @@index([departmentId])
+  @@map("tasks")
+}
+
+/// TaskDependency — Relasi dependency antar task
+/// taskId depends on dependsOnId (taskId tidak bisa dimulai sampai dependsOnId DONE)
+model TaskDependency {
+  taskId      String
+  dependsOnId String
+  createdAt   DateTime  @default(now())
+  /// Soft delete — removed dependencies are kept for history (re-adding revives the row)
+  deletedAt   DateTime?
+
+  task      Task @relation("TaskDependencies", fields: [taskId], references: [id])
+  dependsOn Task @relation("TaskDependents", fields: [dependsOnId], references: [id])
+
+  @@id([taskId, dependsOnId])
+  @@index([dependsOnId])
+  @@map("task_dependencies")
+}
+
+/// TaskAttachment — File attachment pada task
+model TaskAttachment {
+  id         String    @id @default(cuid())
+  taskId     String
+  uploadedBy String
+  fileName   String
+  fileUrl    String
+  mimeType   String?
+  fileSize   Int?
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
+
+  task Task @relation(fields: [taskId], references: [id])
+  user User @relation(fields: [uploadedBy], references: [id])
+
+  @@index([taskId])
+  @@map("task_attachments")
+}
+
+/// TaskAuditLog — Immutable audit trail untuk setiap perubahan task
+/// Tidak boleh di-edit atau di-delete: dijaga oleh Prisma extension (app) DAN
+/// trigger PostgreSQL (prisma/sql/immutability.sql) yang menolak UPDATE/DELETE/TRUNCATE.
+model TaskAuditLog {
+  id            String   @id @default(cuid())
+  taskId        String
+  userId        String
+  changedColumn String
+  oldValue      String?
+  newValue      String?
+  createdAt     DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([taskId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("task_audit_logs")
+}
+
+/// DailyStandup — Ringkasan otomatis harian per proyek (dihasilkan background job)
+/// `date` = hari yang dirangkum (YYYY-MM-DD, zona waktu STANDUP_TIMEZONE)
+model DailyStandup {
+  id          String   @id @default(cuid())
+  projectId   String
+  date        String
+  timezone    String
+  payload     Json
+  generatedAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@unique([projectId, date])
+  @@map("daily_standups")
+}
