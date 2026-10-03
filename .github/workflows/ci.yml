@@ -27,4 +27,4 @@ jobs:
         run: bunx @biomejs/biome check src/
 
       - name: Test
-        run: bun test
+        run: bun test src/
