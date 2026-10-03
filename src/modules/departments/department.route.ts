@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { departmentController } from "./department.controller";
 import { authMiddleware } from "../../middlewares/auth.middleware";
-import { pmOnly, internalOnly } from "../../middlewares/role.middleware";
+import { internalOnly, pmOnly } from "../../middlewares/role.middleware";
+import { departmentController } from "./department.controller";
 
 const departmentRoute = new Hono();
 

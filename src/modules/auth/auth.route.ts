@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { authController } from "./auth.controller";
 import { authMiddleware } from "../../middlewares/auth.middleware";
+import { authController } from "./auth.controller";
 
 const authRoute = new Hono();
 

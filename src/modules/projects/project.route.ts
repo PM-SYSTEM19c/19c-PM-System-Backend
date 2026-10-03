@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { projectController } from "./project.controller";
 import { authMiddleware } from "../../middlewares/auth.middleware";
-import { pmOnly, internalOnly } from "../../middlewares/role.middleware";
+import { internalOnly, pmOnly } from "../../middlewares/role.middleware";
+import { projectController } from "./project.controller";
 
 const projectRoute = new Hono();
 
@@ -18,7 +18,11 @@ projectRoute.patch("/:id", pmOnly(), (c) => projectController.update(c));
 projectRoute.delete("/:id", pmOnly(), (c) => projectController.delete(c));
 
 // Department management — PM only
-projectRoute.post("/:id/departments", pmOnly(), (c) => projectController.addDepartment(c));
-projectRoute.delete("/:id/departments/:departmentId", pmOnly(), (c) => projectController.removeDepartment(c));
+projectRoute.post("/:id/departments", pmOnly(), (c) =>
+	projectController.addDepartment(c),
+);
+projectRoute.delete("/:id/departments/:departmentId", pmOnly(), (c) =>
+	projectController.removeDepartment(c),
+);
 
 export { projectRoute };

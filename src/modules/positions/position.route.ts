@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { positionController } from "./position.controller";
 import { authMiddleware } from "../../middlewares/auth.middleware";
-import { pmOnly, internalOnly } from "../../middlewares/role.middleware";
+import { internalOnly, pmOnly } from "../../middlewares/role.middleware";
+import { positionController } from "./position.controller";
 
 const positionRoute = new Hono();
 
