@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { revokeToken } from "../../lib/jwt";
 import { ValidationError } from "../../shared/errors";
 import { successResponse } from "../../shared/response";
 import type { AuthUser } from "../../shared/types";
@@ -37,9 +38,11 @@ export class AuthController {
 	}
 
 	async logout(c: Context) {
-		// For JWT-based auth, logout is handled client-side by removing the token
-		// Server-side token invalidation could use a blacklist (Redis), but for
-		// this assessment we keep it simple
+		const authHeader = c.req.header("Authorization");
+		if (authHeader?.startsWith("Bearer ")) {
+			const token = authHeader.substring(7);
+			revokeToken(token);
+		}
 		return successResponse(c, { message: "Logged out successfully" });
 	}
 

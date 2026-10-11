@@ -5,6 +5,7 @@ import { z } from "zod";
 import { env } from "../../config/env";
 import { prisma } from "../../lib/prisma";
 import { authMiddleware } from "../../middlewares/auth.middleware";
+import { uploadRateLimiter } from "../../middlewares/rate-limit.middleware";
 import { internalOnly } from "../../middlewares/role.middleware";
 import {
 	ForbiddenError,
@@ -98,7 +99,7 @@ attachmentRoute.get("/:id/attachments", async (c) => {
 });
 
 // POST /tasks/:id/attachments — PM or INTERNAL (same department)
-attachmentRoute.post("/:id/attachments", async (c) => {
+attachmentRoute.post("/:id/attachments", uploadRateLimiter, async (c) => {
 	const user = c.get("user") as AuthUser;
 	const taskId = getParam(c, "id");
 

@@ -1,9 +1,10 @@
 import type { Context } from "hono";
-import { ForbiddenError } from "../../shared/errors";
+import { ForbiddenError, ValidationError } from "../../shared/errors";
 import { paginatedResponse, successResponse } from "../../shared/response";
 import type { AuthUser } from "../../shared/types";
 import { buildListQuery } from "../../shared/utils/pagination";
 import { getParam } from "../../shared/utils/params";
+import { updateUserSchema } from "./user.schema";
 import { userService } from "./user.service";
 
 export class UserController {
@@ -34,16 +35,25 @@ export class UserController {
 
 	async update(c: Context) {
 		const id = getParam(c, "id");
-		const body = await c.req.json();
+		const body = await c.req.json().catch(() => ({}));
+		const parsed = updateUserSchema.safeParse(body);
 
+		if (!parsed.success) {
+			throw new ValidationError(
+				"Validation failed",
+				parsed.error.flatten().fieldErrors,
+			);
+		}
+
+		const data = parsed.data;
 		const updateData: any = {};
-		if (body.name) updateData.name = body.name;
-		if (body.departmentId !== undefined)
-			updateData.departmentId = body.departmentId;
-		if (body.role) updateData.role = body.role;
-		if (body.status) updateData.status = body.status;
-		if (body.positionId !== undefined) updateData.positionId = body.positionId;
-		else if (body.position !== undefined) updateData.positionId = body.position;
+		if (data.name !== undefined) updateData.name = data.name;
+		if (data.departmentId !== undefined)
+			updateData.departmentId = data.departmentId;
+		if (data.role !== undefined) updateData.role = data.role;
+		if (data.status !== undefined) updateData.status = data.status;
+		if (data.positionId !== undefined) updateData.positionId = data.positionId;
+		else if (data.position !== undefined) updateData.positionId = data.position;
 
 		const updated = await userService.update(id, updateData);
 		return successResponse(c, updated);

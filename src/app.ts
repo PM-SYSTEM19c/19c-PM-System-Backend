@@ -1,7 +1,7 @@
-import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { secureHeaders } from "hono/secure-headers";
 import { ERROR_CODES } from "./config/constants";
 import { env } from "./config/env";
 import { routes } from "./routes";
@@ -9,12 +9,11 @@ import { AppError } from "./shared/errors";
 
 const app = new Hono().basePath("/api/v1");
 
-// Serve static uploads
+// Global security headers (SEC-003)
 app.use(
-	"/uploads/*",
-	serveStatic({
-		root: "./",
-		rewriteRequestPath: (path) => path.replace(/^\/api\/v1/, ""),
+	"*",
+	secureHeaders({
+		crossOriginResourcePolicy: "cross-origin",
 	}),
 );
 
@@ -22,7 +21,9 @@ app.use(
 app.use(
 	"*",
 	cors({
-		origin: env.CORS_ORIGIN.split(","),
+		origin: env.CORS_ORIGIN.split(",")
+			.map((o) => o.trim())
+			.filter(Boolean),
 		credentials: true,
 	}),
 );

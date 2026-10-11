@@ -1,5 +1,5 @@
 import type { Context, Next } from "hono";
-import { verifyToken } from "../lib/jwt";
+import { isTokenRevoked, verifyToken } from "../lib/jwt";
 import { prisma } from "../lib/prisma";
 import { UnauthorizedError } from "../shared/errors";
 import type { AuthUser } from "../shared/types";
@@ -17,10 +17,15 @@ export async function authMiddleware(c: Context, next: Next) {
 
 	const token = authHeader.substring(7);
 
+	// Check if token was invalidated via logout (SEC-AUD-002)
+	if (isTokenRevoked(token)) {
+		throw new UnauthorizedError("Token has been revoked");
+	}
+
 	try {
 		const payload = verifyToken(token);
 
-		// Verify user still exists and is not soft-deleted
+		// Verify user exists, is not soft-deleted, and has ACTIVE status (SEC-AUD-001)
 		const user = await prisma.user.findFirst({
 			where: {
 				id: payload.sub,
@@ -30,11 +35,20 @@ export async function authMiddleware(c: Context, next: Next) {
 				id: true,
 				role: true,
 				departmentId: true,
+				status: true,
 			},
 		});
 
 		if (!user) {
 			throw new UnauthorizedError("User not found or has been deactivated");
+		}
+
+		if (user.status !== "APPROVED") {
+			throw new UnauthorizedError(
+				user.status === "PENDING"
+					? "Your account is pending PM approval"
+					: "Your account has been deactivated or rejected",
+			);
 		}
 
 		// Attach user to context
