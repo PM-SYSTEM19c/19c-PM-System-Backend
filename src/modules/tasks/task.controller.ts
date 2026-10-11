@@ -107,8 +107,9 @@ export class TaskController {
 	// ========================================
 
 	async getDependencies(c: Context) {
+		const user = c.get("user") as AuthUser;
 		const id = getParam(c, "id");
-		const dependencies = await taskService.getDependencies(id);
+		const dependencies = await taskService.getDependencies(id, user);
 		return successResponse(c, dependencies);
 	}
 

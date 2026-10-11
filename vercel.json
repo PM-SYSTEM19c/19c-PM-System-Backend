@@ -1,8 +1,8 @@
 {
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api/index.ts"
-    }
-  ]
+	"rewrites": [
+		{
+			"source": "/(.*)",
+			"destination": "/api/index.ts"
+		}
+	]
 }

@@ -11,6 +11,7 @@ import {
 } from "../../shared/errors";
 import type { AuthUser } from "../../shared/types";
 import type { ListQueryResult } from "../../shared/utils/pagination";
+import { projectService } from "../projects/project.service";
 import { auditService } from "./task.audit";
 import { dependencyService } from "./task.dependency";
 import {
@@ -130,7 +131,7 @@ export class TaskService {
 	/**
 	 * Get task by ID with all details
 	 */
-	async findById(taskId: string, _user: AuthUser) {
+	async findById(taskId: string, user: AuthUser) {
 		const task = await prisma.task.findFirst({
 			where: { id: taskId, deletedAt: null },
 			include: {
@@ -177,6 +178,9 @@ export class TaskService {
 		});
 
 		if (!task) throw new NotFoundError("Task", taskId);
+
+		// ABAC: same project scoping as the list endpoint (prevents IDOR by ID)
+		await projectService.checkProjectAccess(task.projectId, user);
 
 		// Calculate effective status
 		const effectiveStatus = await dependencyService.getEffectiveStatus(
@@ -613,11 +617,12 @@ export class TaskService {
 	/**
 	 * Get task dependencies
 	 */
-	async getDependencies(taskId: string) {
+	async getDependencies(taskId: string, user: AuthUser) {
 		const task = await prisma.task.findFirst({
 			where: { id: taskId, deletedAt: null },
 		});
 		if (!task) throw new NotFoundError("Task", taskId);
+		await projectService.checkProjectAccess(task.projectId, user);
 
 		return prisma.taskDependency.findMany({
 			where: { taskId, deletedAt: null, dependsOn: { deletedAt: null } },
@@ -802,20 +807,22 @@ export class TaskService {
 	// AUDIT LOGS
 	// ========================================
 
-	async getTaskAuditLogs(taskId: string, _user: AuthUser) {
+	async getTaskAuditLogs(taskId: string, user: AuthUser) {
 		const task = await prisma.task.findFirst({
 			where: { id: taskId, deletedAt: null },
 		});
 		if (!task) throw new NotFoundError("Task", taskId);
+		await projectService.checkProjectAccess(task.projectId, user);
 
 		return auditService.getTaskAuditLogs(taskId);
 	}
 
-	async getProjectAuditLogs(projectId: string, _user: AuthUser) {
+	async getProjectAuditLogs(projectId: string, user: AuthUser) {
 		const project = await prisma.project.findFirst({
 			where: { id: projectId, deletedAt: null },
 		});
 		if (!project) throw new NotFoundError("Project", projectId);
+		await projectService.checkProjectAccess(projectId, user);
 
 		return auditService.getProjectAuditLogs(projectId);
 	}

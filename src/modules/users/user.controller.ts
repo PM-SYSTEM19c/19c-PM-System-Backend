@@ -1,5 +1,7 @@
 import type { Context } from "hono";
+import { ForbiddenError } from "../../shared/errors";
 import { paginatedResponse, successResponse } from "../../shared/response";
+import type { AuthUser } from "../../shared/types";
 import { buildListQuery } from "../../shared/utils/pagination";
 import { getParam } from "../../shared/utils/params";
 import { userService } from "./user.service";
@@ -22,6 +24,10 @@ export class UserController {
 
 	async findById(c: Context) {
 		const id = getParam(c, "id");
+		const current = c.get("user") as AuthUser;
+		if (current.role !== "PM" && current.id !== id) {
+			throw new ForbiddenError("You can only view your own profile");
+		}
 		const user = await userService.findById(id);
 		return successResponse(c, user);
 	}
