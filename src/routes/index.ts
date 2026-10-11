@@ -28,6 +28,9 @@ const routes = new Hono();
 routes.get("/uploads/:fileName", authMiddleware, internalOnly(), async (c) => {
 	const user = c.get("user") as AuthUser;
 	const rawFileName = c.req.param("fileName");
+	if (!rawFileName) {
+		throw new NotFoundError("Attachment", "unknown");
+	}
 
 	// 1. Prevent path traversal attacks
 	const fileName = path.basename(rawFileName);

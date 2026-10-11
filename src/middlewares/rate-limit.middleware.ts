@@ -25,7 +25,8 @@ export function getClientIp(c: Context): string {
 			.map((ip) => ip.trim())
 			.filter(Boolean);
 		if (ips.length > 0) {
-			return ips[ips.length - 1];
+			const lastIp = ips[ips.length - 1];
+			if (lastIp) return lastIp;
 		}
 	}
 

@@ -36,14 +36,17 @@ export function isTokenRevoked(token: string): boolean {
 }
 
 // Periodic cleanup every 10 minutes to prevent memory leaks
-const cleanupTimer = setInterval(() => {
-	const now = Date.now();
-	for (const [token, exp] of revokedTokens.entries()) {
-		if (exp <= now) {
-			revokedTokens.delete(token);
+const cleanupTimer = setInterval(
+	() => {
+		const now = Date.now();
+		for (const [token, exp] of revokedTokens.entries()) {
+			if (exp <= now) {
+				revokedTokens.delete(token);
+			}
 		}
-	}
-}, 10 * 60 * 1000);
+	},
+	10 * 60 * 1000,
+);
 if (cleanupTimer.unref) cleanupTimer.unref();
 
 export function signToken(payload: JwtPayload): string {
