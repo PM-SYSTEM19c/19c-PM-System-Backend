@@ -826,6 +826,10 @@ export class TaskService {
 
 		return auditService.getProjectAuditLogs(projectId);
 	}
+
+	async getGlobalAuditLogs(limit: number = 20) {
+		return auditService.getGlobalAuditLogs(limit);
+	}
 }
 
 export const taskService = new TaskService();

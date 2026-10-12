@@ -161,6 +161,11 @@ export class TaskController {
 		const logs = await taskService.getProjectAuditLogs(projectId, user);
 		return successResponse(c, logs);
 	}
+
+	async getGlobalAuditLogs(c: Context) {
+		const logs = await taskService.getGlobalAuditLogs();
+		return successResponse(c, logs);
+	}
 }
 
 export const taskController = new TaskController();

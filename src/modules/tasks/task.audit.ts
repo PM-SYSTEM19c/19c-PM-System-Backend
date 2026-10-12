@@ -80,6 +80,27 @@ export class AuditService {
 			},
 		});
 	}
+
+	/**
+	 * Get latest global audit logs for PM activity feed
+	 */
+	async getGlobalAuditLogs(limit: number = 20) {
+		return prisma.taskAuditLog.findMany({
+			take: limit,
+			orderBy: { createdAt: "desc" },
+			include: {
+				user: { select: { id: true, name: true, role: true } },
+				task: {
+					select: {
+						id: true,
+						title: true,
+						status: true,
+						project: { select: { id: true, name: true } },
+					},
+				},
+			},
+		});
+	}
 }
 
 export const auditService = new AuditService();
