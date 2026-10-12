@@ -107,8 +107,8 @@ routes.route("/users", userRoute);
 // Projects (authenticated, scoped by role)
 routes.route("/projects", projectRoute);
 
-// Project audit logs — all users
-routes.get("/projects/:id/audit-logs", authMiddleware, (c) =>
+// Project audit logs — internal users only (CLIENT blocked from internal audit logs)
+routes.get("/projects/:id/audit-logs", authMiddleware, internalOnly(), (c) =>
 	taskController.getProjectAuditLogs(c),
 );
 
