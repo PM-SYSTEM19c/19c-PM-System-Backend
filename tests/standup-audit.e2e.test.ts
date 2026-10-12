@@ -537,7 +537,7 @@ describe("Database triggers", () => {
 // 7. Masking — standups contain internal identities
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("Standup masking", () => {
+describe("Standup masking & Audit log access control", () => {
 	test("CLIENT cannot read standup summaries", async () => {
 		const clientToken = await login("client@assessment.test");
 		const { status } = await authed(
@@ -546,6 +546,26 @@ describe("Standup masking", () => {
 			clientToken,
 		);
 		expect(status).toBe(403);
+	});
+
+	test("CLIENT cannot read project audit logs (P1-01 fix)", async () => {
+		const clientToken = await login("client@assessment.test");
+		const { status } = await authed(
+			"GET",
+			`/projects/${projectId}/audit-logs`,
+			clientToken,
+		);
+		expect(status).toBe(403);
+	});
+
+	test("PM can read project audit logs", async () => {
+		const { status, json } = await authed(
+			"GET",
+			`/projects/${projectId}/audit-logs`,
+			pmToken,
+		);
+		expect(status).toBe(200);
+		expect(Array.isArray(json.data)).toBe(true);
 	});
 });
 
