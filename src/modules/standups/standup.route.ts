@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../../middlewares/auth.middleware";
+import { standupGenerateRateLimiter } from "../../middlewares/rate-limit.middleware";
 import { internalOnly, pmOnly } from "../../middlewares/role.middleware";
 import { projectService } from "../projects/project.service";
 import { standupController } from "./standup.controller";
@@ -28,6 +29,8 @@ standupRoute.get("/", (c) => standupController.list(c));
 standupRoute.get("/:date", (c) => standupController.findByDate(c));
 
 // Generate standup for a project — PM only
-standupRoute.post("/generate", pmOnly(), (c) => standupController.generate(c));
+standupRoute.post("/generate", pmOnly(), standupGenerateRateLimiter, (c) =>
+	standupController.generate(c),
+);
 
 export { standupRoute };
