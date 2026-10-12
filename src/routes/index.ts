@@ -1,7 +1,4 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import { Hono } from "hono";
-import { prisma } from "../lib/prisma";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import {
 	batchStandupRateLimiter,
@@ -9,20 +6,18 @@ import {
 } from "../middlewares/rate-limit.middleware";
 import { internalOnly, pmOnly } from "../middlewares/role.middleware";
 import { attachmentRoute } from "../modules/attachments/attachment.route";
+import { attachmentService } from "../modules/attachments/attachment.service";
 import { authRoute } from "../modules/auth/auth.route";
 import { clientRoute } from "../modules/client/client.route";
 import { departmentRoute } from "../modules/departments/department.route";
 import { positionRoute } from "../modules/positions/position.route";
 import { projectRoute } from "../modules/projects/project.route";
-import { projectService } from "../modules/projects/project.service";
 import { standupController } from "../modules/standups/standup.controller";
 import { standupRoute } from "../modules/standups/standup.route";
 import { taskController } from "../modules/tasks/task.controller";
 import { taskRoute } from "../modules/tasks/task.route";
 import { trashRoute } from "../modules/trash/trash.route";
 import { userRoute } from "../modules/users/user.route";
-import { NotFoundError } from "../shared/errors";
-import { successResponse } from "../shared/response";
 import type { AuthUser } from "../shared/types";
 
 const routes = new Hono();
@@ -36,68 +31,21 @@ routes.get(
 	async (c) => {
 		const user = c.get("user") as AuthUser;
 		const rawFileName = c.req.param("fileName");
-		if (!rawFileName) {
-			throw new NotFoundError("Attachment", "unknown");
-		}
+		const file = await attachmentService.getPhysicalAttachment(
+			rawFileName,
+			user,
+		);
 
-		// 1. Prevent path traversal attacks
-		const fileName = path.basename(rawFileName);
-		if (!fileName || fileName !== rawFileName) {
-			throw new NotFoundError("Attachment", rawFileName);
-		}
-
-		// 2. Lookup task attachment in database
-		const attachment = await prisma.taskAttachment.findFirst({
-			where: {
-				fileUrl: { endsWith: `/${fileName}` },
-				deletedAt: null,
-			},
-			include: {
-				task: {
-					select: {
-						id: true,
-						projectId: true,
-						deletedAt: true,
-					},
-				},
-			},
-		});
-
-		if (!attachment || attachment.task.deletedAt !== null) {
-			throw new NotFoundError("Attachment", fileName);
-		}
-
-		// 3. Check project access using existing projectService.checkProjectAccess
-		// PM: always allowed
-		// CLIENT: blocked by internalOnly()
-		// INTERNAL: checks project_departments assignment
-		await projectService.checkProjectAccess(attachment.task.projectId, user);
-
-		// 4. Verify physical file on disk
-		const filePath = path.resolve(process.cwd(), "uploads", fileName);
-		try {
-			const stat = await fs.stat(filePath);
-			if (!stat.isFile()) {
-				throw new NotFoundError("File", fileName);
-			}
-		} catch {
-			throw new NotFoundError("File", fileName);
-		}
-
-		// 5. Stream file with secure headers
-		const fileBuffer = await fs.readFile(filePath);
-		const mimeType = attachment.mimeType || "application/octet-stream";
-
-		c.header("Content-Type", mimeType);
-		c.header("Content-Length", fileBuffer.length.toString());
+		c.header("Content-Type", file.mimeType);
+		c.header("Content-Length", file.buffer.length.toString());
 		c.header(
 			"Content-Disposition",
-			`inline; filename="${encodeURIComponent(attachment.fileName || fileName)}"`,
+			`inline; filename="${encodeURIComponent(file.fileName)}"`,
 		);
 		c.header("Cache-Control", "private, no-cache, no-store, must-revalidate");
 		c.header("X-Content-Type-Options", "nosniff");
 
-		return c.body(fileBuffer);
+		return c.body(file.buffer as any);
 	},
 );
 
@@ -146,23 +94,8 @@ routes.post(
 routes.route("/trash", trashRoute);
 
 // Global audit logs — PM only, for dashboard activity feed
-routes.get("/audit-logs", authMiddleware, pmOnly(), async (c) => {
-	const logs = await prisma.taskAuditLog.findMany({
-		take: 20,
-		orderBy: { createdAt: "desc" },
-		include: {
-			user: { select: { id: true, name: true, role: true } },
-			task: {
-				select: {
-					id: true,
-					title: true,
-					status: true,
-					project: { select: { id: true, name: true } },
-				},
-			},
-		},
-	});
-	return successResponse(c, logs);
-});
+routes.get("/audit-logs", authMiddleware, pmOnly(), (c) =>
+	taskController.getGlobalAuditLogs(c),
+);
 
 export { routes };
