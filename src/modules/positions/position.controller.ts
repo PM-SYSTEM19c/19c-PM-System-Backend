@@ -1,61 +1,48 @@
 import type { Context } from "hono";
-import { prisma } from "../../lib/prisma";
-import { errorResponse, successResponse } from "../../shared/response";
+import { ValidationError } from "../../shared/errors";
+import { successResponse } from "../../shared/response";
 import { getParam } from "../../shared/utils/params";
+import { createPositionSchema, updatePositionSchema } from "./position.schema";
+import { positionService } from "./position.service";
 
-export const positionController = {
+export class PositionController {
 	async getAll(c: Context) {
-		try {
-			const positions = await prisma.position.findMany({
-				where: { deletedAt: null },
-				orderBy: { name: "asc" },
-			});
-			return successResponse(c, positions);
-		} catch (err: any) {
-			return errorResponse(c, "INTERNAL_ERROR", err.message, 500);
-		}
-	},
+		const positions = await positionService.findAll();
+		return successResponse(c, positions);
+	}
 
 	async create(c: Context) {
-		try {
-			const body = await c.req.json();
-			if (!body.name)
-				return errorResponse(c, "VALIDATION_ERROR", "Name is required", 400);
-
-			const pos = await prisma.position.create({
-				data: { name: body.name, description: body.description },
-			});
-			return successResponse(c, pos, 201);
-		} catch (err: any) {
-			return errorResponse(c, "INTERNAL_ERROR", err.message, 500);
+		const body = await c.req.json();
+		const parsed = createPositionSchema.safeParse(body);
+		if (!parsed.success) {
+			throw new ValidationError(
+				"Validation failed",
+				parsed.error.flatten().fieldErrors,
+			);
 		}
-	},
+		const pos = await positionService.create(parsed.data);
+		return successResponse(c, pos, 201);
+	}
 
 	async update(c: Context) {
-		try {
-			const id = getParam(c, "id");
-			const body = await c.req.json();
-
-			const pos = await prisma.position.update({
-				where: { id },
-				data: { name: body.name, description: body.description },
-			});
-			return successResponse(c, pos);
-		} catch (err: any) {
-			return errorResponse(c, "INTERNAL_ERROR", err.message, 500);
+		const id = getParam(c, "id");
+		const body = await c.req.json();
+		const parsed = updatePositionSchema.safeParse(body);
+		if (!parsed.success) {
+			throw new ValidationError(
+				"Validation failed",
+				parsed.error.flatten().fieldErrors,
+			);
 		}
-	},
+		const pos = await positionService.update(id, parsed.data);
+		return successResponse(c, pos);
+	}
 
 	async delete(c: Context) {
-		try {
-			const id = getParam(c, "id");
-			await prisma.position.update({
-				where: { id },
-				data: { deletedAt: new Date() },
-			});
-			return successResponse(c, { deleted: true });
-		} catch (err: any) {
-			return errorResponse(c, "INTERNAL_ERROR", err.message, 500);
-		}
-	},
-};
+		const id = getParam(c, "id");
+		await positionService.softDelete(id);
+		return successResponse(c, { deleted: true });
+	}
+}
+
+export const positionController = new PositionController();
