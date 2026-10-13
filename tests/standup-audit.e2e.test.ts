@@ -17,7 +17,7 @@ import { PrismaClient } from "@prisma/client";
 // Plain client WITHOUT the app's soft-delete extension → proves the DB itself enforces rules
 const rawDb = new PrismaClient();
 
-const API = "http://localhost:3000/api/v1";
+const API = process.env.API_URL ?? "http://localhost:3000/api/v1";
 let pmToken: string;
 let projectId: string;
 
@@ -49,7 +49,13 @@ beforeAll(async () => {
 
 	// Pick the first project with tasks
 	const { json } = await authed("GET", "/projects", pmToken);
-	projectId = json.data[0].id;
+	const project = json.data.find(
+		(item: { taskStats?: { total: number } }) =>
+			(item.taskStats?.total ?? 0) > 0,
+	);
+	if (!project)
+		throw new Error("Standup E2E requires a seeded project with tasks");
+	projectId = project.id;
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { env } from "../config/env";
 
@@ -52,6 +53,7 @@ if (cleanupTimer.unref) cleanupTimer.unref();
 export function signToken(payload: JwtPayload): string {
 	return jwt.sign(payload, env.JWT_SECRET, {
 		algorithm: "HS256",
+		jwtid: randomUUID(),
 		expiresIn: env.JWT_EXPIRES_IN as SignOptions["expiresIn"],
 	});
 }

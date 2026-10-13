@@ -2,6 +2,7 @@ import { prisma } from "../../lib/prisma";
 import { ForbiddenError, NotFoundError } from "../../shared/errors";
 import type { AuthUser } from "../../shared/types";
 import type { ListQueryResult } from "../../shared/utils/pagination";
+import { projectProgress } from "../../shared/utils/project-progress";
 import type { CreateProjectInput, UpdateProjectInput } from "./project.schema";
 
 export class ProjectService {
@@ -52,16 +53,10 @@ export class ProjectService {
 
 		// Calculate progress for each project
 		const projectsWithProgress = projects.map((project) => {
-			const totalTasks = project.tasks.length;
-			const doneTasks = project.tasks.filter((t) => t.status === "DONE").length;
-			const progress =
-				totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-
 			const { tasks, ...rest } = project;
 			return {
 				...rest,
-				progress,
-				taskStats: { total: totalTasks, done: doneTasks },
+				...projectProgress(tasks),
 			};
 		});
 
@@ -108,16 +103,10 @@ export class ProjectService {
 		// Access control
 		await this.checkProjectAccess(projectId, user);
 
-		const totalTasks = project.tasks.length;
-		const doneTasks = project.tasks.filter((t) => t.status === "DONE").length;
-		const progress =
-			totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-
 		const { tasks, ...rest } = project;
 		return {
 			...rest,
-			progress,
-			taskStats: { total: totalTasks, done: doneTasks },
+			...projectProgress(tasks),
 		};
 	}
 

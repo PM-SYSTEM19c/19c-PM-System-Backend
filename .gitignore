@@ -40,3 +40,6 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 prd.md
 AGENTS.md
 CLAUDE.md
+
+# Runtime user data: preserve locally, do not version in Git.
+/uploads/

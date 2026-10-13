@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -17,36 +16,22 @@ import type { AuthUser } from "../../shared/types";
 import { getParam } from "../../shared/utils/params";
 import { projectService } from "../projects/project.service";
 import { canUploadAttachment } from "../tasks/task.permission";
+import { attachmentBodyLimit } from "./attachment.body-limit";
+import { ALLOWED_MIME_TYPES, MAX_UPLOAD_BYTES } from "./attachment.policy";
+import { writeAttachmentFile } from "./attachment.storage";
 
 const attachmentRoute = new Hono();
 
 // CLIENT role is blocked entirely: internal identities must never reach clients (masking at API level).
-attachmentRoute.use("*", authMiddleware, internalOnly());
-
-/** Max upload size (10 MB) */
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-
-/**
- * Allowed upload types. Files are served from the API origin, so active content
- * (HTML, SVG, JS) is rejected to prevent stored XSS.
- */
-const ALLOWED_MIME_TYPES = new Set([
-	"image/png",
-	"image/jpeg",
-	"image/gif",
-	"image/webp",
-	"application/pdf",
-	"text/plain",
-	"text/csv",
-	"application/zip",
-	"application/x-zip-compressed",
-	"application/msword",
-	"application/vnd.ms-excel",
-	"application/vnd.ms-powerpoint",
-	"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-	"application/vnd.openxmlformats-officedocument.presentationml.presentation",
-]);
+attachmentRoute.use(
+	"*",
+	async (c, next) => {
+		c.header("Cache-Control", "private, no-store");
+		await next();
+	},
+	authMiddleware,
+	internalOnly(),
+);
 
 /** Public origin of this API (works behind Railway/Vercel proxies) */
 function publicOrigin(c: Context): string {
@@ -99,92 +84,100 @@ attachmentRoute.get("/:id/attachments", async (c) => {
 });
 
 // POST /tasks/:id/attachments — PM or INTERNAL (same department)
-attachmentRoute.post("/:id/attachments", uploadRateLimiter, async (c) => {
-	const user = c.get("user") as AuthUser;
-	const taskId = getParam(c, "id");
+attachmentRoute.post(
+	"/:id/attachments",
+	uploadRateLimiter,
+	attachmentBodyLimit(),
+	async (c) => {
+		const user = c.get("user") as AuthUser;
+		const taskId = getParam(c, "id");
 
-	const task = await loadAccessibleTask(taskId, user); // (Dimension 2: Department check)
-	if (
-		!canUploadAttachment(user, {
-			id: task.id,
-			status: task.status,
-			assigneeId: task.assigneeId,
-			departmentId: task.departmentId,
-			projectId: task.projectId,
-		})
-	) {
-		throw new ForbiddenError(
-			"You can only upload attachments to tasks in your department",
-		);
-	}
-
-	let finalFileName = "";
-	let finalFileUrl = "";
-	let finalMimeType: string | null = null;
-	let finalFileSize: number | null = null;
-
-	const contentType = c.req.header("content-type") || "";
-	if (contentType.includes("multipart/form-data")) {
-		const body = await c.req.parseBody();
-		const file = body.file;
-		if (!(file instanceof File)) throw new ValidationError("File is required");
-		if (file.size > MAX_UPLOAD_BYTES) {
-			throw new ValidationError("File is too large (max 10 MB)");
-		}
-		if (!ALLOWED_MIME_TYPES.has(file.type)) {
-			throw new ValidationError(
-				`File type "${file.type || "unknown"}" is not allowed`,
+		const task = await loadAccessibleTask(taskId, user); // (Dimension 2: Department check)
+		if (
+			!canUploadAttachment(user, {
+				id: task.id,
+				status: task.status,
+				assigneeId: task.assigneeId,
+				departmentId: task.departmentId,
+				projectId: task.projectId,
+			})
+		) {
+			throw new ForbiddenError(
+				"You can only upload attachments to tasks in your department",
 			);
 		}
 
-		const uniqueName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "")}`;
-		const arrayBuffer = await file.arrayBuffer();
-		await fs.writeFile(`uploads/${uniqueName}`, Buffer.from(arrayBuffer));
+		let finalFileName = "";
+		let finalFileUrl = "";
+		let finalMimeType: string | null = null;
+		let finalFileSize: number | null = null;
 
-		const displayName =
-			typeof body.fileName === "string" && body.fileName.trim()
-				? body.fileName.trim().slice(0, 255)
-				: file.name;
-		finalFileName = displayName;
-		finalFileUrl = `${publicOrigin(c)}/api/v1/uploads/${uniqueName}`;
-		finalMimeType = file.type;
-		finalFileSize = file.size;
-	} else {
-		const parsed = linkAttachmentSchema.safeParse(await c.req.json());
-		if (!parsed.success) {
-			throw new ValidationError(
-				"Invalid attachment",
-				parsed.error.flatten().fieldErrors,
-			);
+		const contentType = c.req.header("content-type") || "";
+		if (contentType.includes("multipart/form-data")) {
+			const body = await c.req.parseBody();
+			const file = body.file;
+			if (!(file instanceof File))
+				throw new ValidationError("File is required");
+			if (file.size > MAX_UPLOAD_BYTES) {
+				throw new ValidationError("File is too large (max 10 MB)");
+			}
+			if (!ALLOWED_MIME_TYPES.has(file.type)) {
+				throw new ValidationError(
+					`File type "${file.type || "unknown"}" is not allowed`,
+				);
+			}
+
+			const safeName =
+				file.name.replace(/[^a-zA-Z0-9.\-_]/g, "").slice(-160) || "file";
+			const uniqueName = `${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+			const arrayBuffer = await file.arrayBuffer();
+			await writeAttachmentFile(uniqueName, Buffer.from(arrayBuffer));
+
+			const displayName =
+				typeof body.fileName === "string" && body.fileName.trim()
+					? body.fileName.trim().slice(0, 255)
+					: file.name;
+			finalFileName = displayName;
+			finalFileUrl = `${publicOrigin(c)}/api/v1/uploads/${uniqueName}`;
+			finalMimeType = file.type;
+			finalFileSize = file.size;
+		} else {
+			const parsed = linkAttachmentSchema.safeParse(await c.req.json());
+			if (!parsed.success) {
+				throw new ValidationError(
+					"Invalid attachment",
+					parsed.error.flatten().fieldErrors,
+				);
+			}
+			finalFileName = parsed.data.fileName;
+			finalFileUrl = parsed.data.fileUrl;
+			finalMimeType = parsed.data.mimeType ?? null;
+			finalFileSize = parsed.data.fileSize ?? null;
 		}
-		finalFileName = parsed.data.fileName;
-		finalFileUrl = parsed.data.fileUrl;
-		finalMimeType = parsed.data.mimeType ?? null;
-		finalFileSize = parsed.data.fileSize ?? null;
-	}
 
-	const attachment = await prisma.taskAttachment.create({
-		data: {
-			taskId,
-			uploadedBy: user.id,
-			fileName: finalFileName,
-			fileUrl: finalFileUrl,
-			mimeType: finalMimeType,
-			fileSize: finalFileSize,
-		},
-	});
+		const attachment = await prisma.taskAttachment.create({
+			data: {
+				taskId,
+				uploadedBy: user.id,
+				fileName: finalFileName,
+				fileUrl: finalFileUrl,
+				mimeType: finalMimeType,
+				fileSize: finalFileSize,
+			},
+		});
 
-	await prisma.taskAuditLog.create({
-		data: {
-			taskId,
-			userId: user.id,
-			changedColumn: "attachment",
-			newValue: finalFileName,
-		},
-	});
+		await prisma.taskAuditLog.create({
+			data: {
+				taskId,
+				userId: user.id,
+				changedColumn: "attachment",
+				newValue: finalFileName,
+			},
+		});
 
-	return successResponse(c, attachment, 201);
-});
+		return successResponse(c, attachment, 201);
+	},
+);
 
 // DELETE /tasks/:id/attachments/:attachmentId — soft delete
 attachmentRoute.delete(
@@ -193,9 +186,11 @@ attachmentRoute.delete(
 	async (c) => {
 		const user = c.get("user") as AuthUser;
 		const attachmentId = getParam(c, "attachmentId");
+		const taskId = getParam(c, "id");
+		await loadAccessibleTask(taskId, user);
 
 		const attachment = await prisma.taskAttachment.findFirst({
-			where: { id: attachmentId, deletedAt: null },
+			where: { id: attachmentId, taskId, deletedAt: null },
 		});
 		if (!attachment) throw new NotFoundError("Attachment", attachmentId);
 

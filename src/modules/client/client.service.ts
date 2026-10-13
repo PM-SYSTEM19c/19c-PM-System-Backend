@@ -1,5 +1,6 @@
 import { prisma } from "../../lib/prisma";
 import { ForbiddenError, NotFoundError } from "../../shared/errors";
+import { projectProgress } from "../../shared/utils/project-progress";
 import { toClientProject, toClientTask } from "./client.mapper";
 
 /**
@@ -30,12 +31,7 @@ export class ClientService {
 		});
 
 		return projects.map((project) => {
-			const totalTasks = project.tasks.length;
-			const doneTasks = project.tasks.filter((t) => t.status === "DONE").length;
-			const progress =
-				totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-
-			return toClientProject(project, progress);
+			return toClientProject(project, projectProgress(project.tasks).progress);
 		});
 	}
 
@@ -61,12 +57,7 @@ export class ClientService {
 			throw new NotFoundError("Project", projectId);
 		}
 
-		const totalTasks = project.tasks.length;
-		const doneTasks = project.tasks.filter((t) => t.status === "DONE").length;
-		const progress =
-			totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-
-		return toClientProject(project, progress);
+		return toClientProject(project, projectProgress(project.tasks).progress);
 	}
 
 	/**

@@ -5,7 +5,7 @@ import type { AuthUser } from "../../shared/types";
 import { buildListQuery } from "../../shared/utils/pagination";
 import { getParam } from "../../shared/utils/params";
 import { updateUserSchema } from "./user.schema";
-import { userService } from "./user.service";
+import { type UserUpdateData, userService } from "./user.service";
 
 export class UserController {
 	async findAll(c: Context) {
@@ -46,7 +46,7 @@ export class UserController {
 		}
 
 		const data = parsed.data;
-		const updateData: any = {};
+		const updateData: UserUpdateData = {};
 		if (data.name !== undefined) updateData.name = data.name;
 		if (data.departmentId !== undefined)
 			updateData.departmentId = data.departmentId;

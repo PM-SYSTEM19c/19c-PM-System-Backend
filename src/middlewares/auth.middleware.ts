@@ -1,43 +1,80 @@
+import type { User } from "@prisma/client";
 import type { Context, Next } from "hono";
+import { env } from "../config/env";
+import {
+	allowedAttachmentOrigin,
+	attachmentSessionToken,
+	isAttachmentSessionPath,
+	validAttachmentCsrf,
+} from "../lib/browser-attachment-session";
 import { isTokenRevoked, verifyToken } from "../lib/jwt";
 import { prisma } from "../lib/prisma";
-import { UnauthorizedError } from "../shared/errors";
+import { AppError, UnauthorizedError } from "../shared/errors";
 import type { AuthUser } from "../shared/types";
 
 /**
  * Authentication middleware — Layer 1 of Access Control
  * Verifies JWT token and attaches user context to request
  */
-export async function authMiddleware(c: Context, next: Next) {
-	const authHeader = c.req.header("Authorization");
+type AuthRecord = Pick<User, "id" | "role" | "departmentId" | "status">;
+type LookupAuthUser = (id: string) => Promise<AuthRecord | null>;
 
-	if (!authHeader?.startsWith("Bearer ")) {
-		throw new UnauthorizedError("Missing or invalid authorization header");
-	}
+/** Injectable database boundary keeps authentication tests independent of live data. */
+export function createAuthMiddleware(
+	lookupUser: LookupAuthUser = (id) =>
+		prisma.user.findFirst({
+			where: { id, deletedAt: null },
+			select: { id: true, role: true, departmentId: true, status: true },
+		}),
+) {
+	return async (c: Context, next: Next) => {
+		const authHeader = c.req.header("Authorization");
 
-	const token = authHeader.substring(7);
+		const cookieTransport = !authHeader && isAttachmentSessionPath(c.req.path);
+		const token = authHeader?.startsWith("Bearer ")
+			? authHeader.substring(7)
+			: cookieTransport
+				? attachmentSessionToken(
+						c.req.header("cookie"),
+						env.NODE_ENV === "production",
+					)
+				: undefined;
+		if (!token) {
+			throw new UnauthorizedError("Missing or invalid authorization header");
+		}
 
-	// Check if token was invalidated via logout (SEC-AUD-002)
-	if (isTokenRevoked(token)) {
-		throw new UnauthorizedError("Token has been revoked");
-	}
+		if (cookieTransport) {
+			const origin = c.req.header("origin");
+			const unsafe = !["GET", "HEAD", "OPTIONS"].includes(c.req.method);
+			if (
+				c.req.header("sec-fetch-site") === "cross-site" ||
+				(origin && !allowedAttachmentOrigin(origin, env.CORS_ORIGIN)) ||
+				(unsafe &&
+					(!allowedAttachmentOrigin(origin, env.CORS_ORIGIN) ||
+						!validAttachmentCsrf(token, c.req.header("x-csrf-token"))))
+			) {
+				throw new AppError(
+					"CSRF_INVALID",
+					403,
+					"Missing or invalid attachment request protection",
+				);
+			}
+		}
 
-	try {
-		const payload = verifyToken(token);
+		// Check if token was invalidated via logout (SEC-AUD-002)
+		if (isTokenRevoked(token)) {
+			throw new UnauthorizedError("Token has been revoked");
+		}
 
-		// Verify user exists, is not soft-deleted, and has ACTIVE status (SEC-AUD-001)
-		const user = await prisma.user.findFirst({
-			where: {
-				id: payload.sub,
-				deletedAt: null,
-			},
-			select: {
-				id: true,
-				role: true,
-				departmentId: true,
-				status: true,
-			},
-		});
+		let payload: ReturnType<typeof verifyToken>;
+		try {
+			payload = verifyToken(token);
+		} catch {
+			throw new UnauthorizedError("Invalid or expired token");
+		}
+
+		// Verify the user exists, is not soft-deleted, and is APPROVED.
+		const user = await lookupUser(payload.sub);
 
 		if (!user) {
 			throw new UnauthorizedError("User not found or has been deactivated");
@@ -60,8 +97,7 @@ export async function authMiddleware(c: Context, next: Next) {
 
 		c.set("user", authUser);
 		await next();
-	} catch (error) {
-		if (error instanceof UnauthorizedError) throw error;
-		throw new UnauthorizedError("Invalid or expired token");
-	}
+	};
 }
+
+export const authMiddleware = createAuthMiddleware();

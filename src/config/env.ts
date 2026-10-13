@@ -13,6 +13,7 @@ const envSchema = z.object({
 	JWT_EXPIRES_IN: z.string().default("7d"),
 	CORS_ORIGIN: z.string().default("http://localhost:3001"),
 	PUBLIC_URL: z.string().optional(),
+	API_PROXY_SECRET: z.string().min(32).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

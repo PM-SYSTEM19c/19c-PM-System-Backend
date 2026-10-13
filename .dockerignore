@@ -1,0 +1,11 @@
+# Keep local credentials and dependency/build output out of the image build context.
+.git
+node_modules
+.env
+.env.*
+!.env.example
+coverage
+dist
+out
+*.log
+*.tsbuildinfo

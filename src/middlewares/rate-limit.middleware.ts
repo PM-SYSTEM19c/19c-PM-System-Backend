@@ -1,5 +1,6 @@
 import { isIP } from "node:net";
 import type { Context, Next } from "hono";
+import { verifiedProxyClientIp } from "../lib/proxy-client-ip";
 
 export interface RateLimitOptions {
 	windowMs: number;
@@ -37,6 +38,15 @@ export function isValidIp(ip: string): boolean {
  *    keying by authenticated user ID eliminates false-positive proxy collisions.
  */
 export function getClientIp(c: Context): string {
+	const verified = verifiedProxyClientIp(
+		{
+			method: c.req.method,
+			path: c.req.path,
+			header: (name) => c.req.header(name),
+		},
+		process.env.API_PROXY_SECRET,
+	);
+	if (verified) return verified;
 	const xff = c.req.header("x-forwarded-for");
 	if (xff) {
 		const validIps = xff

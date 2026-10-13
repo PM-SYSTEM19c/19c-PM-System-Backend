@@ -4,6 +4,7 @@ import { prisma } from "../../lib/prisma";
 import { NotFoundError } from "../../shared/errors";
 import type { AuthUser } from "../../shared/types";
 import { projectService } from "../projects/project.service";
+import { safeAttachmentMimeType } from "./attachment.policy";
 
 export interface PhysicalAttachmentResult {
 	buffer: Buffer;
@@ -67,7 +68,7 @@ export class AttachmentService {
 
 		// 5. Read physical file content
 		const buffer = await fs.readFile(filePath);
-		const mimeType = attachment.mimeType || "application/octet-stream";
+		const mimeType = safeAttachmentMimeType(attachment.mimeType);
 		const displayName = attachment.fileName || fileName;
 
 		return {

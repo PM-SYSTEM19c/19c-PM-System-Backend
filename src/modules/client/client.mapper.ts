@@ -7,22 +7,13 @@
  * Never return: assignee, department, internal comments, audit logs
  */
 
-interface TaskEntity {
-	id: string;
-	title: string;
-	status: string;
-	clientVisible: boolean;
-	createdAt: Date;
-	updatedAt: Date;
-	[key: string]: any;
-}
+import type { Project, Task } from "@prisma/client";
 
-interface ProjectEntity {
-	id: string;
-	name: string;
-	description: string | null;
-	[key: string]: any;
-}
+type TaskEntity = Pick<
+	Task,
+	"id" | "title" | "status" | "clientVisible" | "createdAt" | "updatedAt"
+>;
+type ProjectEntity = Pick<Project, "id" | "name" | "description">;
 
 /**
  * Map a task to a safe client-facing DTO

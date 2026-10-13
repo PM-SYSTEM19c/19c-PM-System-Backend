@@ -1,6 +1,23 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { NotFoundError } from "../../shared/errors";
 import type { ListQueryResult } from "../../shared/utils/pagination";
+import type { UpdateUserInput } from "./user.schema";
+
+export type UserUpdateData = Omit<UpdateUserInput, "position">;
+
+const USER_PROFILE_SELECT = {
+	id: true,
+	name: true,
+	email: true,
+	role: true,
+	status: true,
+	positionId: true,
+	position: { select: { id: true, name: true } },
+	departmentId: true,
+	department: { select: { id: true, name: true, code: true } },
+	createdAt: true,
+} satisfies Prisma.UserSelect;
 
 export class UserService {
 	async findAll(listQuery: ListQueryResult) {
@@ -13,18 +30,7 @@ export class UserService {
 				skip,
 				take,
 				orderBy: orderBy as any,
-				select: {
-					id: true,
-					name: true,
-					email: true,
-					role: true,
-					status: true,
-					positionId: true,
-					position: { select: { id: true, name: true } },
-					departmentId: true,
-					department: { select: { id: true, name: true, code: true } },
-					createdAt: true,
-				},
+				select: USER_PROFILE_SELECT,
 			}),
 			prisma.user.count({ where: whereClause }),
 		]);
@@ -35,25 +41,14 @@ export class UserService {
 	async findById(id: string) {
 		const targetUser = await prisma.user.findFirst({
 			where: { id, deletedAt: null },
-			select: {
-				id: true,
-				name: true,
-				email: true,
-				role: true,
-				status: true,
-				positionId: true,
-				position: { select: { id: true, name: true } },
-				departmentId: true,
-				department: { select: { id: true, name: true, code: true } },
-				createdAt: true,
-			},
+			select: USER_PROFILE_SELECT,
 		});
 
 		if (!targetUser) throw new NotFoundError("User", id);
 		return targetUser;
 	}
 
-	async update(id: string, updateData: any) {
+	async update(id: string, updateData: UserUpdateData) {
 		const targetUser = await prisma.user.findFirst({
 			where: { id, deletedAt: null },
 		});
@@ -62,18 +57,7 @@ export class UserService {
 		return prisma.user.update({
 			where: { id },
 			data: updateData,
-			select: {
-				id: true,
-				name: true,
-				email: true,
-				role: true,
-				status: true,
-				positionId: true,
-				position: { select: { id: true, name: true } },
-				departmentId: true,
-				department: { select: { id: true, name: true, code: true } },
-				createdAt: true,
-			},
+			select: USER_PROFILE_SELECT,
 		});
 	}
 }
