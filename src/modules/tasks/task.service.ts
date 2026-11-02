@@ -30,6 +30,8 @@ const EDITABLE_FIELDS = [
 	"description",
 	"departmentId",
 	"assigneeId",
+	"startDate",
+	"dueDate",
 	"clientVisible",
 ] as const;
 type EditableField = (typeof EDITABLE_FIELDS)[number];
@@ -247,6 +249,8 @@ export class TaskService {
 				description: input.description,
 				departmentId: input.departmentId,
 				assigneeId: input.assigneeId,
+				startDate: input.startDate,
+				dueDate: input.dueDate,
 				clientVisible: input.clientVisible,
 			},
 			include: {
@@ -318,6 +322,23 @@ export class TaskService {
 				const reference =
 					baseline && field in baseline ? baseline[field] : current[field];
 				if (!sameValue(next, reference)) clientChanges[field] = next;
+			}
+
+			const finalStartDate =
+				("startDate" in clientChanges
+					? clientChanges.startDate
+					: current.startDate) ?? null;
+			const finalDueDate =
+				("dueDate" in clientChanges ? clientChanges.dueDate : current.dueDate) ??
+				null;
+			if (
+				finalStartDate instanceof Date &&
+				finalDueDate instanceof Date &&
+				finalDueDate < finalStartDate
+			) {
+				throw new ValidationError(
+					"Due date must be on or after the start date",
+				);
 			}
 
 			// Stale version → detect true conflicts (both sides changed the same field)
@@ -546,6 +567,8 @@ export class TaskService {
 		status: TaskStatus;
 		departmentId: string;
 		assigneeId: string | null;
+		startDate: Date | null;
+		dueDate: Date | null;
 		clientVisible: boolean;
 		version: number;
 		updatedAt: Date;
@@ -557,6 +580,8 @@ export class TaskService {
 			status: task.status,
 			departmentId: task.departmentId,
 			assigneeId: task.assigneeId,
+			startDate: task.startDate?.toISOString() ?? null,
+			dueDate: task.dueDate?.toISOString() ?? null,
 			clientVisible: task.clientVisible,
 			version: task.version,
 			updatedAt: task.updatedAt.toISOString(),

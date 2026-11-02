@@ -140,6 +140,10 @@ model Task {
   status        TaskStatus @default(TODO)
   departmentId  String
   assigneeId    String?
+
+  startDate     DateTime?
+  dueDate       DateTime?
+
   clientVisible Boolean    @default(false)
   version       Int        @default(1)
   createdAt     DateTime   @default(now())
