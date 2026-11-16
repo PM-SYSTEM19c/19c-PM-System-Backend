@@ -1,22 +1,24 @@
 import { z } from "zod";
 
-export const createTaskSchema = z.object({
-	projectId: z.string().min(1, "Project ID is required"),
-	title: z.string().min(1, "Title is required").max(300),
-	description: z.string().optional().nullable(),
-	departmentId: z.string().min(1, "Department ID is required"),
-	assigneeId: z.string().min(1, "Assignee is required"),
-	startDate: z.coerce.date().optional().nullable(),
-	dueDate: z.coerce.date().optional().nullable(),
-	clientVisible: z.boolean().default(false),
-}).refine(
-	(data) =>
-		!data.startDate || !data.dueDate || data.dueDate >= data.startDate,
-	{
-		message: "Due date must be on or after the start date",
-		path: ["dueDate"],
-	},
-);
+export const createTaskSchema = z
+	.object({
+		projectId: z.string().min(1, "Project ID is required"),
+		title: z.string().min(1, "Title is required").max(300),
+		description: z.string().optional().nullable(),
+		departmentId: z.string().min(1, "Department ID is required"),
+		assigneeId: z.string().min(1, "Assignee is required"),
+		startDate: z.coerce.date().optional().nullable(),
+		dueDate: z.coerce.date().optional().nullable(),
+		clientVisible: z.boolean().default(false),
+	})
+	.refine(
+		(data) =>
+			!data.startDate || !data.dueDate || data.dueDate >= data.startDate,
+		{
+			message: "Due date must be on or after the start date",
+			path: ["dueDate"],
+		},
+	);
 
 /**
  * Snapshot of editable fields as the client saw them when it started editing.
@@ -36,24 +38,26 @@ const taskBaselineSchema = z
 	})
 	.strict();
 
-export const updateTaskSchema = z.object({
-	title: z.string().min(1).max(300).optional(),
-	description: z.string().optional().nullable(),
-	departmentId: z.string().min(1).optional(),
-	assigneeId: z.string().min(1).nullable().optional(),
-	startDate: z.coerce.date().nullable().optional(),
-	dueDate: z.coerce.date().nullable().optional(),
-	clientVisible: z.boolean().optional(),
-	version: z.number().int().min(1, "Version is required"),
-	baseline: taskBaselineSchema.optional(),
-}).refine(
-	(data) =>
-		!data.startDate || !data.dueDate || data.dueDate >= data.startDate,
-	{
-		message: "Due date must be on or after the start date",
-		path: ["dueDate"],
-	},
-);
+export const updateTaskSchema = z
+	.object({
+		title: z.string().min(1).max(300).optional(),
+		description: z.string().optional().nullable(),
+		departmentId: z.string().min(1).optional(),
+		assigneeId: z.string().min(1).nullable().optional(),
+		startDate: z.coerce.date().nullable().optional(),
+		dueDate: z.coerce.date().nullable().optional(),
+		clientVisible: z.boolean().optional(),
+		version: z.number().int().min(1, "Version is required"),
+		baseline: taskBaselineSchema.optional(),
+	})
+	.refine(
+		(data) =>
+			!data.startDate || !data.dueDate || data.dueDate >= data.startDate,
+		{
+			message: "Due date must be on or after the start date",
+			path: ["dueDate"],
+		},
+	);
 
 export const updateTaskStatusSchema = z.object({
 	status: z.enum(["TODO", "IN_PROGRESS", "DONE"]),

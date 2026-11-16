@@ -329,8 +329,9 @@ export class TaskService {
 					? clientChanges.startDate
 					: current.startDate) ?? null;
 			const finalDueDate =
-				("dueDate" in clientChanges ? clientChanges.dueDate : current.dueDate) ??
-				null;
+				("dueDate" in clientChanges
+					? clientChanges.dueDate
+					: current.dueDate) ?? null;
 			if (
 				finalStartDate instanceof Date &&
 				finalDueDate instanceof Date &&
