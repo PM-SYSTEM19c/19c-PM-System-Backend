@@ -1,0 +1,3 @@
+ALTER TABLE "tasks"
+ADD COLUMN "startDate" TIMESTAMP(3),
+ADD COLUMN "dueDate" TIMESTAMP(3);
